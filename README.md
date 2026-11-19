@@ -1,162 +1,56 @@
-# Telegram Event Media Bot
+# UAkli Media Bot
 
-A Telegram bot for collecting, organizing, and automatically uploading photos and videos from multiple events to Google Drive.
+Telegram bot for collecting photos, videos, and documents from multiple events in dedicated Google Drive folders.
 
-## 🎯 Project Overview
+**Status: initial MVP.** The application code is in place but has not yet been connected to a real Telegram bot or Google Drive, or load-tested.
 
-Telegram Event Media Bot is designed for event organizers, production teams, conferences, festivals, concerts, and other events where multiple participants need to submit their media files to one centralized storage location.
+## What is implemented
 
-Instead of creating separate Telegram bots or chats for each event, organizers can use **one Telegram bot with an interactive event selection menu**.
+- One Telegram bot for all participants, with inline event-selection buttons (`/start`, `/events`).
+- Separate event selection per Telegram user.
+- Admin-only event creation (`/add_event YYYY-MM-DD Event name`) and closure (`/close_event ID`).
+- Automatic Google Drive folder creation for new events.
+- Photo, video, document intake, durable SQLite upload queue, and upload confirmation.
+- Up to three upload attempts, and queue restart recovery.
+- Dockerfile, environment variable configuration, and .gitignore.
 
-Participants select an event, upload their media, and the bot automatically saves their files to the corresponding Google Drive folder.
+## Setup
 
-## ✨ Planned Features
+1. Install Python 3.12+ and run `pip install -r requirements.txt`.
+2. Copy `.env.example` to `.env`.
+3. Create a **new** Telegram bot token through @BotFather and set `TELEGRAM_BOT_TOKEN`. Revoke any token previously shared in a chat.
+4. Set `ADMIN_TELEGRAM_IDS` to your numeric Telegram user ID (find it with `/myid`). Separate several IDs with commas.
+5. Enable the Google Drive API in a Google Cloud project. Authorize an OAuth client **out of band** with Google Drive scope, and configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`. The ChatGPT Google Drive connector cannot substitute for the bot's OAuth credentials. Do not commit secrets.
+6. Create a destination folder on your Google Drive and put its folder ID in `GOOGLE_DRIVE_ROOT_FOLDER_ID`.
+7. Run `python -m app.main`. Docker is also supported: build the image and run it with an env file and a persistent writable volume at `/opt/app/data`.
 
-### For Participants
+Participant workflow: `/start` → choose an event → send media in the bot's private chat → receive queued/success status.
 
-- Select an event using Telegram inline buttons.
-- Upload photos, videos, and documents.
-- Upload multiple files and media albums.
-- Automatically route files to the selected event.
-- Switch between events at any time.
-- Receive upload confirmations and error notifications.
-- No Google account required for participants.
+Admin workflow: `/myid` → configure admin ID → `/add_event 2026-11-19 Conference Kyiv` → participants select the event.
 
-### For Administrators
+## Architecture
 
-- Create, edit, and close events.
-- Assign event names and dates.
-- Automatically create event-specific Google Drive folders.
-- Manage the list of available events.
-- Monitor upload status and failures.
-- Manage authorized administrators.
+- `app/main.py`: Telegram handlers, event menu, queue worker.
+- `app/db.py`: SQLite events, selections and upload job state.
+- `app/drive.py`: Google Drive folder creation and resumable uploads.
+- `data/`: SQLite database and temporary incoming files (ignored by Git).
+- `Dockerfile`: deployment image.
 
-### File Management
+## Important limitations
 
-- Centralized Google Drive storage.
-- Separate folders for each event.
-- Preserve original file contents without additional re-encoding.
-- Persistent upload queue.
-- Automatic retries after temporary failures.
-- Duplicate upload protection.
-- Recovery after application restarts.
-- Support for large media files, subject to Telegram API limits and deployment configuration.
+- Normal Telegram hosted Bot API file downloads are limited to **20 MB**. Large videos require a properly configured **local Telegram Bot API server**, with `TELEGRAM_LOCAL_API_URL` and `TELEGRAM_LOCAL_FILE_URL`, and integration testing.
+- The current worker processes one file at a time. Concurrent uploads and large-file behavior have not been validated.
+- Photos sent as Telegram photos may already be compressed; send as documents to preserve original bytes.
+- A process crash after an upload succeeds but before completion is recorded may create a duplicate Google Drive file on retry. Exactly-once reconciliation is not yet implemented.
+- Jobs that fail three times need manual remediation; no admin retry command exists yet.
+- OAuth setup/refresh credentials, bot token, hosting, monitoring, and backup are the operator's responsibility.
+- No production end-to-end testing, performance testing, or security review has been completed.
+- Private chat only; the bot does not monitor Telegram groups.
 
-## 🔄 How It Works
+## Development reference
 
-**1. Event Creation**
+[Alirewa/tg-bot-uploader-drive](https://github.com/Alirewa/tg-bot-uploader-drive) was researched as a reference. This repository's initial Python source was authored independently, not copied from that repository.
 
-An administrator creates an event:
+## License
 
-`Conference Kyiv — 2026-11-19`
-
-The bot associates the event with a dedicated Google Drive folder.
-
-**2. Event Selection**
-
-A participant opens the Telegram bot and selects an event from the available buttons.
-
-**3. Media Submission**
-
-The participant sends photos, videos, or documents directly to the bot.
-
-**4. Automatic Processing**
-
-The bot records the selected event for each incoming file, queues the upload, and transfers the media to Google Drive.
-
-**5. Organized Storage**
-
-Example directory structure:
-
-    Event Media Archive/
-    ├── 2026-11-19_Conference_Kyiv/
-    │   ├── photo_001.jpg
-    │   ├── photo_002.jpg
-    │   └── video_001.mp4
-    ├── 2026-11-20_Concert/
-    │   ├── photo_001.jpg
-    │   └── video_001.mp4
-    └── 2026-11-21_Festival/
-        └── photo_001.jpg
-
-## 🏗️ Planned Architecture
-
-| Component | Technology |
-|---|---|
-| Programming language | Python |
-| Telegram integration | Pyrogram or python-telegram-bot |
-| User interface | Telegram Inline Keyboard |
-| Database | SQLite |
-| Cloud storage | Google Drive API v3 |
-| Authentication | Google OAuth 2.0 |
-| Deployment | Docker |
-| Hosting | Linux VPS / Google Cloud VM |
-
-### Processing Flow
-
-Telegram User → Telegram Bot → Event Selection → Persistent Upload Queue → Media Processor → Google Drive → Event Folder
-
-Each uploaded file is assigned to an event when the message is received, preventing incorrect routing if the participant switches events while uploads are in progress.
-
-## 🔐 Security
-
-The project is designed around the following principles:
-
-- Only authorized administrators can manage events.
-- Participants do not need access to Google Drive.
-- Telegram tokens and Google credentials must never be committed to GitHub.
-- Sensitive credentials are stored in secure deployment configuration.
-- Upload operations are verified before temporary files are removed.
-- Application permissions should follow the principle of least privilege.
-
-## 🚀 Development Roadmap
-
-### Phase 1 — Core Bot
-- [ ] Initialize project structure.
-- [ ] Configure Telegram integration.
-- [ ] Implement event selection buttons.
-- [ ] Create administrator commands.
-- [ ] Implement SQLite database.
-
-### Phase 2 — Google Drive Integration
-- [ ] Configure Google Drive OAuth authentication.
-- [ ] Implement automatic folder creation.
-- [ ] Implement photo and video uploads.
-- [ ] Implement persistent upload queue.
-- [ ] Add retry and duplicate protection.
-
-### Phase 3 — Deployment
-- [ ] Create Docker configuration.
-- [ ] Configure environment variables.
-- [ ] Prepare Linux deployment instructions.
-- [ ] Implement logging and health checks.
-- [ ] Test multiple concurrent participants.
-- [ ] Test large files and recovery after restarts.
-
-## 📦 Project Status
-
-**Status: Planning / Initial Development**
-
-The architecture and requirements are defined. Implementation and integration testing are pending.
-
-The application is not yet ready for production use.
-
-## 🛠️ Reference Project
-
-Initial technical reference:
-
-[Alirewa/tg-bot-uploader-drive](https://github.com/Alirewa/tg-bot-uploader-drive)
-
-The planned implementation will adapt the Telegram-to-Google-Drive workflow for centralized event management instead of individual user storage.
-
-Any reused source code will retain the applicable original license and copyright notices.
-
-## 📄 License
-
-To be determined before the first public release.
-
----
-
-**Telegram Event Media Bot**
-
-One bot. Multiple events. Organized media storage.
+Not yet selected.
