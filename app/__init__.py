@@ -1,0 +1,1 @@
+"""UAkli Media Bot application."""
